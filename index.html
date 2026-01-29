@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>크리스코드 로그인</title>
+<style>
+  body {
+    font-family: "San Francisco", sans-serif;
+    background-color: #f0f4f8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    margin: 0;
+  }
+  .container {
+    background: #fff;
+    padding: 20px 30px;
+    border-radius: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+  }
+  input[type="email"], input[type="password"], input[type="file"] {
+    width: 100%;
+    padding: 12px 10px;
+    margin: 10px 0;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+    font-size: 16px;
+  }
+  button {
+    background-color: #A2F5BC; /* 밝은 민트색 */
+    color: #fff;
+    border: none;
+    padding: 12px 0;
+    width: 100%;
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: 0.2s;
+  }
+  button:hover {
+    background-color: #7EE8A7; /* hover용 진한 민트 */
+  }
+  #preview {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-top: 10px;
+    border: 2px solid #A2F5BC;
+  }
+</style>
+<script type="module">
+  import { firebaseConfig } from './config.js';
+
+  // Firebase 초기화
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+  import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+  import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+  import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth();
+  const db = getFirestore();
+  const storage = getStorage();
+
+  // 로그인 상태 감지 + 세션 유지
+  onAuthStateChanged(auth, user => {
+    const welcome = document.getElementById('welcome');
+    if(user){
+      welcome.textContent = `${user.email}님 환영합니다!`;
+    } else {
+      welcome.textContent = '로그인 해주세요';
+      document.getElementById("preview").src = "";
+    }
+  });
+
+  // 자동 로그아웃 (30분)
+  let logoutTimer;
+  function resetTimer() {
+    clearTimeout(logoutTimer);
+    logoutTimer = setTimeout(() => {
+      signOut(auth);
+      alert("자동 로그아웃 되었습니다.");
+    }, 30*60*1000);
+  }
+  ['mousemove','keydown','touchstart'].forEach(evt => window.addEventListener(evt, resetTimer));
+  resetTimer();
+
+  // 회원가입
+  window.signUp = function() {
+    const email = document.getElementById('email').value;
+    const pw = document.getElementById('password').value;
+    createUserWithEmailAndPassword(auth, email, pw)
+      .then(() => alert("회원가입 성공!"))
+      .catch(err => alert(err.message));
+  }
+
+  // 로그인
+  window.signIn = function() {
+    const email = document.getElementById('email').value;
+    const pw = document.getElementById('password').value;
+    signInWithEmailAndPassword(auth, email, pw)
+      .then(() => alert("로그인 성공!"))
+      .catch(err => alert(err.message));
+  }
+
+  // 프로필 사진 업로드
+  window.uploadProfilePic = function() {
+    const file = document.getElementById("profilePic").files[0];
+    const user = auth.currentUser;
+    if(!file || !user) return alert("사진 선택 후 로그인하세요");
+
+    const storageRef = ref(storage, `profilePics/${user.uid}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on('state_changed', 
+      snapshot => {}, 
+      error => console.error(error),
+      () => {
+        getDownloadURL(uploadTask.snapshot.ref).then(url => {
+          document.getElementById("preview").src = url;
+          setDoc(doc(db, "users", user.uid), { profilePic: url }, { merge:true });
+          alert("프로필 사진 업로드 완료!");
+        });
+      }
+    );
+  }
+</script>
+</head>
+<body>
+  <div class="container">
+    <h2 id="welcome">로그인 해주세요</h2>
+    <input type="email" id="email" placeholder="이메일">
+    <input type="password" id="password" placeholder="비밀번호">
+    <button onclick="signIn()">로그인</button>
+    <button onclick="signUp()">회원가입</button>
+    <hr>
+    <input type="file" id="profilePic">
+    <button onclick="uploadProfilePic()">프로필 사진 업로드</button>
+    <img id="preview" src="" alt="프리뷰">
+  </div>
+</body>
+</html>
